@@ -1,0 +1,11 @@
+openai
+watchdog
+pymongo
+python-dotenv
+pyobjc-framework-Vision
+pyobjc-framework-Quartz
+pyobjc-framework-Cocoa
+pillow
+typer
+rich
+shellingham

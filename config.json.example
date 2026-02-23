@@ -1,0 +1,15 @@
+{
+  "model": "gpt-4.1-nano",
+  "autocopy": true,
+  "autocopy_mode": "answer",
+  "max_ocr_preview": 800,
+  "max_context_chars": 8000,
+  "ocr_languages": [
+    "en-US"
+  ],
+  "ocr_recognition_level": "accurate",
+  "debug_ocr": false,
+  "prompt_main": "OCR TEXT:\n{text}\n\nTASK:\n- Detect all questions (coding, MCQ, theory, math).\n- Respond ONLY with a numbered list of answers.\n- Do NOT rewrite the questions.\n- Keep answers concise and neat.\n- For coding tasks, provide code only.\n- For MCQ, give option letter/number plus a short reason.\n- If missing info, say \"Missing info: ...\".\n",
+  "prompt_watch": "OCR TEXT:\n{text}\n\nTASK:\n- Respond ONLY with a numbered list of answers.\n- Do NOT rewrite the questions.\n- Keep answers concise and neat.\n- For coding tasks, provide code only.\n- For MCQ, give option letter/number plus a short reason.\n- If missing info, say \"Missing info: ...\".\n",
+  "prompt_followup": "Conversation so far:\n{context}\n\nUser follow-up:\n{question}\n\nAnswer clearly and concisely."
+}

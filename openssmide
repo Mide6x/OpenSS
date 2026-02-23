@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+/Users/nolimitmide/Desktop/OpenSS/venv/bin/python3 /Users/nolimitmide/Desktop/OpenSS/cli.py "$@"
