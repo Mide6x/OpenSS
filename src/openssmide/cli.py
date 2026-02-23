@@ -56,9 +56,9 @@ def _welcome(ctx: typer.Context):
         default="capture",
     ).strip().lower()
     if choice in ("capture", "c"):
-        ctx.invoke(capture)
+        ctx.invoke(capture, title=None, chat=True, voice=False)
     elif choice in ("voice", "v"):
-        ctx.invoke(voice)
+        ctx.invoke(voice, duration=5, chat=True)
     elif choice in ("update", "u"):
         ctx.invoke(update)
     else:
