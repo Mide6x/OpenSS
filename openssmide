@@ -1,2 +1,6 @@
 #!/usr/bin/env bash
-/Users/nolimitmide/Desktop/OpenSS/venv/bin/python3 /Users/nolimitmide/Desktop/OpenSS/cli.py "$@"
+# Find the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# Run with the internal virtual environment
+"$DIR/venv/bin/python3" "$DIR/cli.py" "$@"
