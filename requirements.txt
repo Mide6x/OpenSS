@@ -7,7 +7,6 @@ pyobjc-framework-Quartz
 pyobjc-framework-Cocoa
 pyobjc-framework-AVFoundation
 pyobjc-framework-Speech
-pillow
 typer
 rich
 SpeechRecognition

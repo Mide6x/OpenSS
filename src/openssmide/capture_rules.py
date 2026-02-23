@@ -2,7 +2,6 @@ import subprocess
 from pathlib import Path
 
 import Quartz
-from PIL import Image, ImageDraw
 
 
 def _list_onscreen_windows():
@@ -12,49 +11,12 @@ def _list_onscreen_windows():
     )
 
 
-def capture_active_chrome_window(out_path: Path) -> bool:
-    windows = _list_onscreen_windows()
-    for w in windows:
-        if w.get("kCGWindowLayer", 0) != 0:
-            continue
-        if w.get("kCGWindowAlpha", 1) == 0:
-            continue
-        owner = (w.get("kCGWindowOwnerName") or "").lower()
-        if "chrome" not in owner:
-            continue
-        win_id = w.get("kCGWindowNumber")
-        if not win_id:
-            continue
-        subprocess.run(
-            ["screencapture", "-x", "-l", str(win_id), str(out_path)],
-            check=True,
-        )
-        return True
-    return False
-
-
-def _find_terminal_window_rect_and_display():
-    windows = _list_onscreen_windows()
-
-    term_window = None
-    for w in windows:
-        owner = (w.get("kCGWindowOwnerName") or "").lower()
-        if owner in ["terminal", "iterm2", "iterm"]:
-            if w.get("kCGWindowLayer", 0) != 0:
-                continue
-            if w.get("kCGWindowAlpha", 1) == 0:
-                continue
-            term_window = w
-            break
-
-    if not term_window:
-        return Quartz.CGMainDisplayID(), None
-
-    bounds = term_window.get("kCGWindowBounds")
+def _display_id_for_bounds(bounds):
+    if not bounds:
+        return Quartz.CGMainDisplayID()
     rect = Quartz.CGRectMake(
         bounds["X"], bounds["Y"], bounds["Width"], bounds["Height"]
     )
-
     display_id = Quartz.CGMainDisplayID()
     try:
         result = Quartz.CGGetDisplaysWithRect(rect, 1, None)
@@ -68,36 +30,49 @@ def _find_terminal_window_rect_and_display():
                 display_id = displays[0]
     except Exception:
         pass
+    return display_id
 
-    return display_id, bounds
+
+def _find_window_by_owner(owner_names):
+    windows = _list_onscreen_windows()
+    for w in windows:
+        if w.get("kCGWindowLayer", 0) != 0:
+            continue
+        if w.get("kCGWindowAlpha", 1) == 0:
+            continue
+        owner = (w.get("kCGWindowOwnerName") or "").lower()
+        if owner not in owner_names:
+            continue
+        return w
+    return None
 
 
-def capture_terminal_display_then_mask_terminal(out_path: Path) -> None:
-    display_id, term_bounds = _find_terminal_window_rect_and_display()
+def capture_active_chrome_window(out_path: Path):
+    chrome_window = _find_window_by_owner(["google chrome", "chrome"])
+    if not chrome_window:
+        return False, "Chrome window not found. Open Chrome and try again."
 
-    display_idx = 1
-    try:
-        display_idx = Quartz.CGDisplayIDToOpenGLDisplayMask(display_id).bit_length()
-    except Exception:
-        display_idx = 1
+    term_window = _find_window_by_owner(["terminal", "iterm2", "iterm"])
+    if not term_window:
+        return False, "Terminal window not found."
+
+    chrome_bounds = chrome_window.get("kCGWindowBounds")
+    term_bounds = term_window.get("kCGWindowBounds")
+    chrome_display = _display_id_for_bounds(chrome_bounds)
+    term_display = _display_id_for_bounds(term_bounds)
+
+    if chrome_display != term_display:
+        return (
+            False,
+            "Chrome and Terminal must be on the same display. Move them to the same screen and retry.",
+        )
+
+    win_id = chrome_window.get("kCGWindowNumber")
+    if not win_id:
+        return False, "Chrome window ID not found."
+
     subprocess.run(
-        ["screencapture", "-x", "-D", str(display_idx), str(out_path)],
+        ["screencapture", "-x", "-l", str(win_id), str(out_path)],
         check=True,
     )
-
-    if not term_bounds:
-        return
-
-    db = Quartz.CGDisplayBounds(display_id)
-    display_origin_x = db.origin.x
-    display_origin_y = db.origin.y
-
-    x = int(term_bounds["X"] - display_origin_x)
-    y = int(term_bounds["Y"] - display_origin_y)
-    w = int(term_bounds["Width"])
-    h = int(term_bounds["Height"])
-
-    img = Image.open(out_path).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    draw.rectangle([x, y, x + w, y + h], fill=(0, 0, 0))
-    img.save(out_path)
+    return True, None

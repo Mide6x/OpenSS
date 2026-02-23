@@ -6,6 +6,8 @@ from rich.table import Table
 from rich.status import Status
 from rich.prompt import Prompt, Confirm
 import os
+import sys
+import subprocess
 import time
 from pathlib import Path
 from bson import ObjectId
@@ -28,22 +30,39 @@ app = typer.Typer(help="OpenSS: AI-powered screenshot analysis and chat.")
 console = Console()
 CONFIG = load_config()
 
-def handle_autocopy(text: str):
-    if CONFIG.get("autocopy", False):
-        code_block = extract_first_code_block(text)
-        mode = CONFIG.get("autocopy_mode", "answer")
-        
-        payload = text
-        if mode == "code" and code_block:
-            payload = code_block
-        elif mode == "answer":
-            payload = text
-            
-        if payload:
-            copy_to_clipboard(payload)
-            msg = "Whole answer copied" if mode == "answer" else "Code snippet copied"
-            return msg
-    return None
+
+@app.callback(invoke_without_command=True)
+def _welcome(ctx: typer.Context):
+    if ctx.invoked_subcommand is not None:
+        return
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+
+    title = "[bold green]Welcome to OpenSS[/bold green]"
+    body = (
+        "[bold]What it does[/bold]\n"
+        "Capture a Chrome window, extract text with macOS OCR, and answer with GPT.\n\n"
+        "[bold]Commands[/bold]\n"
+        "`openssmide capture`  Capture active Chrome window and answer\n"
+        "`openssmide voice`    Ask by voice (native macOS speech-to-text)\n"
+        "`openssmide update`   Pull latest code and update dependencies\n\n"
+        "[bold]Docs[/bold]\n"
+        "Interfaces: `INTERFACES.md`"
+    )
+    console.print(Panel(body, title=title, border_style="green"))
+
+    choice = Prompt.ask(
+        "[bold blue]Start[/bold blue] (capture/voice/update/exit)",
+        default="capture",
+    ).strip().lower()
+    if choice in ("capture", "c"):
+        ctx.invoke(capture)
+    elif choice in ("voice", "v"):
+        ctx.invoke(voice)
+    elif choice in ("update", "u"):
+        ctx.invoke(update)
+    else:
+        return
 
 @app.command()
 def capture(
@@ -79,17 +98,7 @@ def capture(
             add_message(session_id, "user", voice_question)
             add_message(session_id, "assistant", ans)
 
-    console.print(Panel(Markdown(ans), title="AI Analysis", border_style="green"))
-
-    # Explicit Code Display
-    code_block = extract_first_code_block(ans)
-    if code_block:
-        console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
-
-    # Handle Autocopy
-    msg = handle_autocopy(ans)
-    if msg:
-        console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
+    handle_ai_response(ans, console)
 
     if chat:
         console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
@@ -234,6 +243,22 @@ def ask(
     if chat:
         console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
         interactive_chat(session_id)
+
+
+@app.command()
+def update():
+    """Pull latest code and update dependencies."""
+    root = Path(__file__).resolve().parents[2]
+    console.print("[bold blue]Updating OpenSS...[/bold blue]")
+    try:
+        subprocess.run(["git", "-C", str(root), "pull", "origin", "main"], check=True)
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(root / "requirements.txt")],
+            check=True,
+        )
+        console.print("[bold green]Update complete.[/bold green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Update failed:[/red] {e}")
 
 if __name__ == "__main__":
     app()

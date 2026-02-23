@@ -9,10 +9,7 @@ from dotenv import load_dotenv
 
 from .config import load_config
 from .cleanup import cleanup_old_screens
-from .capture_rules import (
-    capture_active_chrome_window,
-    capture_terminal_display_then_mask_terminal,
-)
+from .capture_rules import capture_active_chrome_window
 from .db import add_message, create_session, get_session_messages
 
 # --- CONFIG ---
@@ -98,9 +95,9 @@ def general_ask(question: str) -> str:
 
 
 def take_ss(out: Path):
-    if capture_active_chrome_window(out):
-        return
-    capture_terminal_display_then_mask_terminal(out)
+    ok, err = capture_active_chrome_window(out)
+    if not ok:
+        raise RuntimeError(err or "Failed to capture Chrome window.")
 
 
 def extract_first_code_block(text: str) -> str:
@@ -137,7 +134,10 @@ def take_screenshot_and_analyze(session_title=None):
         raise SystemExit("Set OPENAI_API_KEY first")
 
     img = WORK_DIR / f"ss_{int(time.time())}.png"
-    take_ss(img)
+    try:
+        take_ss(img)
+    except Exception as e:
+        return None, str(e)
 
     text = ocr_image(img)
 
@@ -155,7 +155,7 @@ def take_screenshot_and_analyze(session_title=None):
 
 
 def handle_ai_response(ans: str, console=None):
-    """Unified handler for AI responses: prints Markdown, extracts code, and handles autocopy."""
+    """Unified handler for AI responses: prints Markdown and handles autocopy."""
     from rich.console import Console
     from rich.panel import Panel
     from rich.markdown import Markdown
@@ -170,14 +170,10 @@ def handle_ai_response(ans: str, console=None):
     # 1. Print Main Answer
     console.print(Panel(Markdown(ans), title="AI Analysis", border_style="green"))
 
-    # 2. Extract and Print Code
-    code_block = extract_first_code_block(ans)
-    if code_block:
-        console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
-
-    # 3. Handle Autocopy
+    # 2. Handle Autocopy
     if cfg.get("autocopy", False):
         mode = cfg.get("autocopy_mode", "answer")
+        code_block = extract_first_code_block(ans)
         payload = code_block if (mode == "code" and code_block) else ans
         
         if payload:

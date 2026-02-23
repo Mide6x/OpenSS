@@ -4,10 +4,11 @@ OpenSS is a premium CLI tool that captures your screen (optimized for Chrome on 
 
 > [!IMPORTANT]
 > **Compatibility**: This tool is strictly for **macOS** and is optimized for the **Google Chrome** browser.
+> **Chrome + Terminal must be on the same display** for capture to work.
 
 ## Features
 
-- 📸 **Smart Capture**: Automatically detects active Chrome windows or masks terminal windows to keep your private logs out of the AI.
+- 📸 **Smart Capture**: Captures the active Chrome window.
 - 🔍 **Native OCR**: Uses macOS Vision Framework for lightning-fast, high-accuracy text recognition.
 - 💬 **Interactive Chat**: Follow up on analyses with a conversational AI interface.
 - 🎙️ **Native Voice-to-Text**: Ask questions with your voice using macOS native speech recognition (type `/v` in chat or use `--voice` flag).
@@ -111,9 +112,18 @@ openssmide config <key> <value>    # Update a key
 - `autocopy_mode`: Set to `code` to only copy the code block, or `answer` for the whole response.
 - `model`: Change the AI model (e.g., `gpt-4o`).
 
+### Update
+Pull latest code and update dependencies.
+```bash
+openssmide update
+```
+
+### Interfaces
+See `INTERFACES.md` for available interfaces and entry points.
+
 ## Security & Privacy
 - **.gitignore**: The `.env` file and `config.json` are ignored by git to protect your API keys and local settings.
-- **Terminal Masking**: When not using Chrome, the tool automatically masks the terminal window in the screenshot to prevent sensitive command history from being sent to the AI.
+- **Chrome Capture**: Only the Chrome window is captured. Terminal must be on the same display as Chrome.
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
