@@ -153,3 +153,5 @@ cython_debug/
 config.json
 *.png
 /Users/nolimitmide/.ss_ai/
+# Local workspace files
+OpenSS.code-workspace
