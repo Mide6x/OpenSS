@@ -10,10 +10,18 @@ import time
 from pathlib import Path
 from bson import ObjectId
 
-from ss_ai import take_screenshot_and_analyze, build_context, ask_followup, extract_first_code_block, copy_to_clipboard
-from ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
-from db import add_message
-from config import load_config
+from .ss_ai import (
+    take_screenshot_and_analyze,
+    build_context,
+    ask_followup,
+    extract_first_code_block,
+    copy_to_clipboard,
+    general_ask,
+)
+from .ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
+from .db import add_message
+from .config import load_config
+from .voice import quick_voice_input
 
 app = typer.Typer(help="OpenSS: AI-powered screenshot analysis and chat.")
 console = Console()
@@ -39,12 +47,19 @@ def handle_autocopy(text: str):
 @app.command()
 def capture(
     title: str = typer.Option(None, "--title", "-t", help="Session title"),
-    chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after capture")
+    chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after capture"),
+    voice: bool = typer.Option(False, "--voice", "-v", help="Use voice input for initial question (not applicable to screenshot OCR)")
 ):
     """Capture a screenshot, analyze it with AI, and optionally start a chat."""
-    if not os.environ.get("OPENAI_API_KEY"):
-        console.print("[red]Error: OPENAI_API_KEY environment variable not set.[/red]")
-        raise typer.Exit(1)
+    # Handle Voice Input for Question
+    voice_question = None
+    if voice:
+        console.print("[bold green]Listening for your question (5s)...[/bold green]")
+        voice_question, err = quick_voice_input(5)
+        if err:
+            console.print(f"[red]Error: {err}[/red]")
+        elif voice_question:
+            console.print(f"[bold blue]Question:[/bold blue] {voice_question}")
 
     with Status("[bold blue]Capturing and analyzing...", console=console) as status:
         session_id, result = take_screenshot_and_analyze(title)
@@ -54,6 +69,14 @@ def capture(
         return
 
     text, ans, img = result
+    
+    # If we have a voice question, perform a follow-up immediately
+    if voice_question:
+        with Status("[bold blue]Analyzing voice question...", console=console):
+            ctx = build_context(session_id)
+            ans = ask_followup(ctx, voice_question)
+            add_message(session_id, "user", voice_question)
+            add_message(session_id, "assistant", ans)
 
     console.print(Panel(Markdown(ans), title="AI Analysis", border_style="green"))
 
@@ -119,7 +142,7 @@ def config(
 ):
     """View or update configuration."""
     import json
-    config_path = Path("/Users/nolimitmide/Desktop/OpenSS/config.json")
+    config_path = Path(__file__).resolve().parents[2] / "config.json"
     
     if key and value:
         # Update config
@@ -147,6 +170,56 @@ def config(
 
     console.print(table)
     console.print("\n[dim]To update use: openssmide config <key> <value>[/dim]")
+
+@app.command()
+def voice(
+    duration: int = typer.Option(5, "--duration", "-d", help="Recording duration in seconds")
+):
+    """Voice command: Ask a question verbally and get an AI response immediately."""
+    console.print(f"[bold green]Listening for {duration}s...[/bold green]")
+    text, err = quick_voice_input(duration)
+    if err:
+        console.print(f"[red]Error: {err}[/red]")
+        return
+    if text:
+        console.print(f"\n[bold blue]You said:[/bold blue] {text}")
+        
+        with Status("[dim]Thinking...", console=console):
+            ans = general_ask(text)
+            
+        console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
+        
+        # Display Code
+        code_block = extract_first_code_block(ans)
+        if code_block:
+            console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
+            
+        # Handle Autocopy
+        msg = handle_autocopy(ans)
+        if msg:
+            console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
+    else:
+        console.print("[yellow]No speech detected.[/yellow]")
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Question to ask the AI")
+):
+    """Directly ask the AI a question without a screenshot."""
+    with Status("[dim]Thinking...", console=console):
+        ans = general_ask(question)
+        
+    console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
+    
+    # Display Code
+    code_block = extract_first_code_block(ans)
+    if code_block:
+        console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
+        
+    # Handle Autocopy
+    msg = handle_autocopy(ans)
+    if msg:
+        console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
 
 if __name__ == "__main__":
     app()

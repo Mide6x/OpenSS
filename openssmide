@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
-# Find the directory where this script is located
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-# Run with the internal virtual environment
-"$DIR/venv/bin/python3" "$DIR/cli.py" "$@"
+# --- PORTABLE PROJECT RESOLUTION ---
+# This script finds the project root even if it is symlinked.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+# If we are in a global bin (like ~/bin) after a COPY instead of a symlink,
+# DIR will be ~/bin. We check if venv/bin/python3 exists in that DIR.
+# If not, we fall back to a hardcoded path detected at installation time.
+VENV_PYTHON="$DIR/venv/bin/python3"
+
+if [ ! -f "$VENV_PYTHON" ]; then
+    # FALLBACK: If the script was copied, we might be able to find the original project root.
+    # For now, we will suggest the correct symlink command if it fails.
+    echo "Error: Could not find virtual environment at $VENV_PYTHON"
+    echo "This usually happens if you COPIED the script instead of SYMLINKING it."
+    echo ""
+    echo "Please fix it by running:"
+    echo "ln -sf \"$(pwd)/openssmide\" ~/bin/openssmide"
+    exit 1
+fi
+
+# Run the localized package
+PYTHONPATH="$DIR/src" "$VENV_PYTHON" -m openssmide.cli "$@"

@@ -37,11 +37,17 @@ DEFAULT_CONFIG = {
         "User follow-up:\n{question}\n\n"
         "Answer clearly and concisely."
     ),
+    "prompt_general": (
+        "User question: {question}\n\n"
+        "Answer clearly and concisely."
+    ),
 }
 
 
 def load_config() -> dict:
-    path = Path(__file__).with_name("config.json")
+    # Project root (…/OpenSS)
+    root = Path(__file__).resolve().parents[2]
+    path = root / "config.json"
     if not path.exists():
         return DEFAULT_CONFIG.copy()
     try:

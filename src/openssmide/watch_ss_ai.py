@@ -9,9 +9,9 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from dotenv import load_dotenv
 
-from config import load_config
-from cleanup import cleanup_old_screens
-from db import add_message, create_session
+from .config import load_config
+from .cleanup import cleanup_old_screens
+from .db import add_message, create_session
 
 # --- CONFIG ---
 CONFIG = load_config()

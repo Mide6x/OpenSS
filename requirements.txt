@@ -5,7 +5,10 @@ python-dotenv
 pyobjc-framework-Vision
 pyobjc-framework-Quartz
 pyobjc-framework-Cocoa
+pyobjc-framework-AVFoundation
+pyobjc-framework-Speech
 pillow
 typer
 rich
-shellingham
+SpeechRecognition
+pydub

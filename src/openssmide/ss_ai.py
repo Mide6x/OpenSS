@@ -7,13 +7,13 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from config import load_config
-from cleanup import cleanup_old_screens
-from capture_rules import (
+from .config import load_config
+from .cleanup import cleanup_old_screens
+from .capture_rules import (
     capture_active_chrome_window,
     capture_terminal_display_then_mask_terminal,
 )
-from db import add_message, create_session, get_session_messages
+from .db import add_message, create_session, get_session_messages
 
 # --- CONFIG ---
 CONFIG = load_config()
@@ -78,6 +78,15 @@ def ask_gpt(text: str) -> str:
 
 def ask_followup(context: str, question: str) -> str:
     prompt = CONFIG["prompt_followup"].format(context=context, question=question)
+    resp = client.responses.create(
+        model=MODEL,
+        input=prompt,
+    )
+    return resp.output_text.strip()
+
+
+def general_ask(question: str) -> str:
+    prompt = CONFIG["prompt_general"].format(question=question)
     resp = client.responses.create(
         model=MODEL,
         input=prompt,

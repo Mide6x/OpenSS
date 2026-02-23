@@ -10,6 +10,7 @@ OpenSS is a premium CLI tool that captures your screen (optimized for Chrome on 
 - 📸 **Smart Capture**: Automatically detects active Chrome windows or masks terminal windows to keep your private logs out of the AI.
 - 🔍 **Native OCR**: Uses macOS Vision Framework for lightning-fast, high-accuracy text recognition.
 - 💬 **Interactive Chat**: Follow up on analyses with a conversational AI interface.
+- 🎙️ **Native Voice-to-Text**: Ask questions with your voice using macOS native speech recognition (type `/v` in chat or use `--voice` flag).
 - 📋 **Autocopy**: Automatically copies clean AI responses or extracted code blocks to your clipboard.
 - 🎨 **Rich UI**: Beautiful terminal interface with markdown rendering and progress spinners.
 
@@ -44,11 +45,11 @@ OPENAI_API_KEY=your_key_here
 MONGO_URI=mongodb://localhost:27017/  # Optional
 ```
 
-### 4. Global Command (Recommended)
-To run `openssmide` from anywhere, create a symlink in your `~/bin` folder:
+### 4. Global Command (Required for Voice & Portability)
+To run `openssmide` from anywhere, you **must** use a symlink (do not just copy the file, or it won't find the virtual environment):
 ```bash
 mkdir -p ~/bin
-ln -s "$PWD/openssmide" ~/bin/openssmide
+ln -sf "$(pwd)/openssmide" ~/bin/openssmide
 ```
 Ensure `~/bin` is in your `$PATH`. If you use Zsh, add this to `~/.zshrc`:
 ```bash
@@ -65,6 +66,22 @@ openssmide capture
 *Options:*
 - `-t, --title TEXT`: Set a custom session title.
 - `--chat / --no-chat`: Enter or skip interactive follow-up mode (Default: chat).
+- `-v, --voice`: Use voice input to ask a question about the screenshot immediately.
+
+### Voice Question
+Ask the AI a question verbally and get an instant response.
+```bash
+openssmide voice
+```
+*Options:*
+- `-d, --duration INTEGER`: Seconds to record (Default: 5).
+*Note: Uses native AVFoundation for recording and a stable transcription engine to avoid macOS Speech framework crashes.*
+
+### Ask AI
+Directly ask the AI a question from the terminal.
+```bash
+openssmide ask "What is the capital of France?"
+```
 
 ### Resume Chat
 Continue a conversation from a previous session.
@@ -72,6 +89,8 @@ Continue a conversation from a previous session.
 openssmide chat          # Resumes the latest session
 openssmide chat --id ID  # Resumes a specific session
 ```
+*Inside Chat:*
+- Type `/v` or `/voice` to trigger a 5-second voice recording for your next question.
 
 ### View History
 See a list of recent analysis sessions in a beautiful table.

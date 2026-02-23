@@ -4,8 +4,8 @@ from bson import ObjectId
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from config import load_config
-from db import add_message, get_session_messages, list_sessions
+from .config import load_config
+from .db import add_message, get_session_messages, list_sessions
 
 
 load_dotenv()
@@ -52,11 +52,12 @@ def interactive_chat(session_id):
     from rich.console import Console
     from rich.markdown import Markdown
     from rich.prompt import Prompt
+    from rich.panel import Panel
     
     console = Console()
     current_session = session_id
     
-    console.print("\n[bold green]Chat session active.[/bold green] [dim](Press Enter on empty line to exit)[/dim]\n")
+    console.print("\n[bold green]Chat session active.[/bold green] [dim](Press Enter on empty line to exit, or type /v for voice)[/dim]\n")
     
     while True:
         try:
@@ -66,6 +67,19 @@ def interactive_chat(session_id):
         if not q:
             break
             
+        if q.strip() == "/v" or q.strip() == "/voice":
+            from .voice import quick_voice_input
+            console.print("[bold green]Listening (5s)...[/bold green]")
+            voice_text, err = quick_voice_input(5)
+            if err:
+                console.print(f"[red]Error: {err}[/red]")
+                continue
+            if not voice_text:
+                console.print("[yellow]No speech detected.[/yellow]")
+                continue
+            console.print(f"[bold blue]You said:[/bold blue] {voice_text}")
+            q = voice_text
+
         with console.status("[dim]Thinking...[/dim]"):
             ctx = load_context(current_session)
             ans = ask_llm(ctx, q)
@@ -73,8 +87,8 @@ def interactive_chat(session_id):
         console.print(Markdown(ans))
         
         # Explicit Code Display for follow-ups
-        from ss_ai import extract_first_code_block, copy_to_clipboard
-        from config import load_config
+        from .ss_ai import extract_first_code_block, copy_to_clipboard
+        from .config import load_config
         cfg = load_config()
         
         code_block = extract_first_code_block(ans)
