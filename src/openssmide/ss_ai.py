@@ -13,13 +13,28 @@ from .capture_rules import capture_active_chrome_window
 from .db import add_message, create_session, get_session_messages
 
 # --- CONFIG ---
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG = load_config()
 MODEL = CONFIG["model"]
 WORK_DIR = Path.home() / ".ss_ai"
 WORK_DIR.mkdir(parents=True, exist_ok=True)
 
-load_dotenv()
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+_client = None
+
+def get_client():
+    """Lazy-init the OpenAI client. Only called when actually needed."""
+    global _client
+    if _client is None:
+        load_dotenv(PROJECT_ROOT / ".env")
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "\n  ✗ OPENAI_API_KEY not set.\n"
+                "  Run: openssmide setup\n"
+            )
+        _client = OpenAI(api_key=api_key)
+    return _client
+
 cleanup_old_screens()
 
 # -------- OCR (macOS Vision) --------
@@ -67,7 +82,7 @@ def ocr_image(path: Path) -> str:
 def ask_gpt(text: str) -> str:
     cfg = load_config()
     prompt = cfg["prompt_main"].format(text=text)
-    resp = client.responses.create(
+    resp = get_client().responses.create(
         model=cfg["model"],
         input=prompt,
     )
@@ -77,7 +92,7 @@ def ask_gpt(text: str) -> str:
 def ask_followup(context: str, question: str) -> str:
     cfg = load_config()
     prompt = cfg["prompt_followup"].format(context=context, question=question)
-    resp = client.responses.create(
+    resp = get_client().responses.create(
         model=cfg["model"],
         input=prompt,
     )
@@ -87,7 +102,7 @@ def ask_followup(context: str, question: str) -> str:
 def general_ask(question: str) -> str:
     cfg = load_config()
     prompt = cfg["prompt_general"].format(question=question)
-    resp = client.responses.create(
+    resp = get_client().responses.create(
         model=cfg["model"],
         input=prompt,
     )

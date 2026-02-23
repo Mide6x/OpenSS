@@ -30,13 +30,68 @@ app = typer.Typer(help="OpenSS: AI-powered screenshot analysis and chat.")
 console = Console()
 CONFIG = load_config()
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ENV_PATH = PROJECT_ROOT / ".env"
+
+
+def _run_setup():
+    """Prompt for API key and optional MongoDB URI, write to .env."""
+    console.print()
+    console.print("  [bold green]● OpenSS Setup[/bold green]")
+    console.print("  ───────────────────")
+    console.print()
+    console.print(f"  Credentials will be stored in:")
+    console.print(f"  [dim]{ENV_PATH}[/dim]")
+    console.print()
+
+    api_key = Prompt.ask("  [bold]OpenAI API Key[/bold]").strip()
+    if not api_key:
+        console.print("  [red]✗ API key is required.[/red]")
+        raise typer.Exit(1)
+
+    mongo = Prompt.ask(
+        "  [bold]MongoDB URI[/bold] [dim](optional, press Enter to skip)[/dim]",
+        default="",
+    ).strip()
+
+    lines = [f"OPENAI_API_KEY={api_key}"]
+    if mongo:
+        lines.append(f"MONGO_URI={mongo}")
+    lines.append("")
+
+    ENV_PATH.write_text("\n".join(lines))
+    os.environ["OPENAI_API_KEY"] = api_key
+    if mongo:
+        os.environ["MONGO_URI"] = mongo
+
+    console.print()
+    console.print("  [green]✓ Saved![/green] You're ready to go.")
+    console.print("  Run: [bold]openssmide capture[/bold]")
+    console.print()
+
+
+@app.command()
+def setup():
+    """Set up your OpenAI API key (and optional MongoDB URI)."""
+    _run_setup()
+
 
 @app.callback(invoke_without_command=True)
 def _welcome(ctx: typer.Context):
     if ctx.invoked_subcommand is not None:
+        # Auto-trigger setup if .env is missing (except for 'setup' and 'update' commands)
+        if not ENV_PATH.exists() and ctx.invoked_subcommand not in ("setup", "update"):
+            console.print()
+            console.print("  [yellow]First-time setup required.[/yellow]")
+            _run_setup()
         return
+
+    # If no command given, check for .env first
+    if not ENV_PATH.exists():
+        _run_setup()
+        return
+
     from rich.panel import Panel
-    from rich.prompt import Prompt
 
     title = "[bold green]Welcome to OpenSS[/bold green]"
     body = (

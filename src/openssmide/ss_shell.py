@@ -1,17 +1,18 @@
 import os
+from pathlib import Path
 
 from bson import ObjectId
-from openai import OpenAI
 from dotenv import load_dotenv
 
 from .config import load_config
 from .db import add_message, get_session_messages, list_sessions
+from .ss_ai import get_client
 
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 CONFIG = load_config()
 MODEL = os.getenv("SS_MODEL", CONFIG["model"])
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 current_session = None
 
@@ -19,7 +20,7 @@ current_session = None
 def ask_llm(context: str, question: str) -> str:
     cfg = load_config()
     prompt = cfg["prompt_followup"].format(context=context, question=question)
-    r = client.responses.create(model=cfg.get("model", "gpt-4o-mini"), input=prompt)
+    r = get_client().responses.create(model=cfg.get("model", "gpt-4o-mini"), input=prompt)
     return r.output_text.strip()
 
 
