@@ -52,6 +52,9 @@ def interactive_chat(session_id):
     from rich.console import Console
     from rich.prompt import Prompt
     from .ss_ai import handle_ai_response
+    import sys
+    import select
+    import fcntl
     
     console = Console()
     current_session = session_id
@@ -68,6 +71,24 @@ def interactive_chat(session_id):
         if not q:
             break
             
+        # Paste detection: Drain everything currently in the buffer
+        # We use non-blocking read to get everything lingering in the OS/Terminal buffer
+        fd = sys.stdin.fileno()
+        old_fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        try:
+            fcntl.fcntl(fd, fcntl.F_SETFL, old_fl | os.O_NONBLOCK)
+            while True:
+                r, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if r:
+                    extra = sys.stdin.read(4096)
+                    if not extra: break
+                    q += extra
+                else: break
+        except (IOError, select.error):
+            pass
+        finally:
+            fcntl.fcntl(fd, fcntl.F_SETFL, old_fl)
+
         # Commands
         cmd = q.strip().lower()
         if cmd in ("/v", "/voice"):
@@ -86,10 +107,10 @@ def interactive_chat(session_id):
             console.print("[bold yellow]Multiline Mode:[/bold yellow] Type your message, then a single [bold].[/bold] on a new line to finish.")
             lines = []
             while True:
-                line = input()
+                line = sys.stdin.readline()
                 if line.strip() == ".":
                     break
-                lines.append(line)
+                lines.append(line.rstrip("\n"))
             q = "\n".join(lines)
             if not q.strip():
                 continue

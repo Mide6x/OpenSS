@@ -186,28 +186,14 @@ def main():
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("Set OPENAI_API_KEY first")
 
-    print("\n[CAPTURE] Taking screenshot...")
+    print("\n[CAPTURE] Analyzing...")
     session_id, result = take_screenshot_and_analyze()
     if not session_id:
         print(result)
         return
 
     text, ans, img = result
-
-    print("\n[OCR TEXT]\n")
-    print(text[: CONFIG["max_ocr_preview"]])
-    print("\n[AI ANSWERS]\n")
-    print(ans)
-    
-    code_block = extract_first_code_block(ans)
-    if code_block:
-        print("\n[CODE DETECTED]\n")
-        print(code_block)
-
-    if CONFIG["autocopy"]:
-        payload = code_block if (CONFIG["autocopy_mode"] == "code" and code_block) else ans
-        copy_to_clipboard(payload)
-        print("\n[CLIPBOARD] copied.\n")
+    handle_ai_response(ans)
 
     while True:
         try:

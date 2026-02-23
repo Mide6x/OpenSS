@@ -249,13 +249,35 @@ def ask(
 def update():
     """Pull latest code and update dependencies."""
     root = Path(__file__).resolve().parents[2]
-    console.print("[bold blue]Updating OpenSS...[/bold blue]")
     try:
-        subprocess.run(["git", "-C", str(root), "pull", "origin", "main"], check=True)
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(root / "requirements.txt")],
-            check=True,
-        )
+        from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+
+        with Progress(
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TextColumn("{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Updating OpenSS", total=100)
+
+            progress.update(task, completed=5)
+            subprocess.run(
+                ["git", "-C", str(root), "pull", "origin", "main"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            progress.update(task, completed=50)
+
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", str(root / "requirements.txt")],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            progress.update(task, completed=100)
+
         console.print("[bold green]Update complete.[/bold green]")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Update failed:[/red] {e}")
