@@ -51,49 +51,47 @@ def open_latest_session():
 
 
 def interactive_chat(session_id):
+    import readline  # enables arrow keys, cursor movement, history
     from rich.console import Console
     from rich.prompt import Prompt
-    from .ss_ai import handle_ai_response
+    from .ss_ai import handle_ai_response, take_screenshot_and_analyze, build_context, ask_followup
     from .config import AVAILABLE_MODELS, save_config
     import sys
-    import select
-    import fcntl
-    
+
     console = Console()
     current_session = session_id
-    
-    console.print("\n[bold green]Chat session active.[/bold green] [dim](Type /v for voice, /m for multiline, /model to switch)[/dim]\n")
-    
+
+    console.print("\n[bold green]Chat session active.[/bold green]")
+    console.print("[dim]Type /help for commands. Arrow keys work. Type 'capture' to re-capture.[/dim]\n")
+
     while True:
         try:
-            q = Prompt.ask("[bold blue]Ask[/bold blue]")
+            q = input("\033[1;34mAsk\033[0m: ")
         except EOFError:
             break
         except KeyboardInterrupt:
+            console.print()
             break
-        if not q:
+        if not q.strip():
             break
-            
-        # Paste detection: Drain everything currently in the buffer
-        # We use non-blocking read to get everything lingering in the OS/Terminal buffer
-        fd = sys.stdin.fileno()
-        old_fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-        try:
-            fcntl.fcntl(fd, fcntl.F_SETFL, old_fl | os.O_NONBLOCK)
-            while True:
-                r, _, _ = select.select([sys.stdin], [], [], 0.05)
-                if r:
-                    extra = sys.stdin.read(4096)
-                    if not extra: break
-                    q += extra
-                else: break
-        except (IOError, select.error):
-            pass
-        finally:
-            fcntl.fcntl(fd, fcntl.F_SETFL, old_fl)
 
         # Commands
         cmd = q.strip().lower()
+
+        if cmd in ("capture", "/capture"):
+            console.print()
+            with console.status("[bold blue]Capturing and analyzing..."):
+                from .ss_ai import take_screenshot_and_analyze
+                s_id, result = take_screenshot_and_analyze(None)
+            if not s_id:
+                console.print(f"[red]{result}[/red]")
+                continue
+            text, ans, img = result
+            current_session = s_id
+            handle_ai_response(ans, console)
+            console.print("")
+            continue
+
         if cmd in ("/v", "/voice"):
             from .voice import quick_voice_input
             console.print("[bold green]Listening (5s)...[/bold green]")
@@ -133,16 +131,25 @@ def interactive_chat(session_id):
             save_config(cfg)
             console.print(f"[bold green]Switched to {selected['name']}![/bold green]\n")
             continue
+        elif cmd == "/help":
+            console.print("\n[bold]Commands:[/bold]")
+            console.print("  [cyan]capture[/cyan]     Re-capture screenshot and analyze")
+            console.print("  [cyan]/v[/cyan]          Voice input")
+            console.print("  [cyan]/m[/cyan]          Multiline paste mode")
+            console.print("  [cyan]/model[/cyan]      Switch AI model")
+            console.print("  [cyan]/help[/cyan]       Show this help")
+            console.print("  [dim]Empty line or Ctrl+C to exit[/dim]\n")
+            continue
 
         with console.status("[dim]Thinking...[/dim]"):
             ctx = load_context(current_session)
             ans = ask_llm(ctx, q)
-            
+
         handle_ai_response(ans, console)
-        
+
         add_message(current_session, "user", q)
         add_message(current_session, "assistant", ans)
-        console.print("") # Padding
+        console.print("")  # Padding
 
 
 def main():
