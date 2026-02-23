@@ -19,7 +19,7 @@ from .ss_ai import (
     general_ask,
 )
 from .ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
-from .db import add_message
+from .db import add_message, create_session
 from .config import load_config
 from .voice import quick_voice_input
 
@@ -173,9 +173,10 @@ def config(
 
 @app.command()
 def voice(
-    duration: int = typer.Option(5, "--duration", "-d", help="Recording duration in seconds")
+    duration: int = typer.Option(5, "--duration", "-d", help="Recording duration in seconds"),
+    chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after query")
 ):
-    """Voice command: Ask a question verbally and get an AI response immediately."""
+    """Voice command: Ask a question verbally and get an AI response. Optionally start a chat."""
     console.print(f"[bold green]Listening for {duration}s...[/bold green]")
     text, err = quick_voice_input(duration)
     if err:
@@ -189,6 +190,12 @@ def voice(
             
         console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
         
+        # Create session if we want to chat or keep history
+        title = f"Voice: {text[:30]}..."
+        session_id = create_session(title)
+        add_message(session_id, "user", text)
+        add_message(session_id, "assistant", ans)
+
         # Display Code
         code_block = extract_first_code_block(ans)
         if code_block:
@@ -198,19 +205,30 @@ def voice(
         msg = handle_autocopy(ans)
         if msg:
             console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
+
+        if chat:
+            console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
+            interactive_chat(session_id)
     else:
         console.print("[yellow]No speech detected.[/yellow]")
 
 @app.command()
 def ask(
-    question: str = typer.Argument(..., help="Question to ask the AI")
+    question: str = typer.Argument(..., help="Question to ask the AI"),
+    chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after query")
 ):
-    """Directly ask the AI a question without a screenshot."""
+    """Directly ask the AI a question without a screenshot. Optionally start a chat."""
     with Status("[dim]Thinking...", console=console):
         ans = general_ask(question)
         
     console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
     
+    # Create session
+    title = f"Ask: {question[:30]}..."
+    session_id = create_session(title)
+    add_message(session_id, "user", question)
+    add_message(session_id, "assistant", ans)
+
     # Display Code
     code_block = extract_first_code_block(ans)
     if code_block:
@@ -220,6 +238,10 @@ def ask(
     msg = handle_autocopy(ans)
     if msg:
         console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
+
+    if chat:
+        console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
+        interactive_chat(session_id)
 
 if __name__ == "__main__":
     app()

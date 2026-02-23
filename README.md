@@ -75,6 +75,7 @@ openssmide voice
 ```
 *Options:*
 - `-d, --duration INTEGER`: Seconds to record (Default: 5).
+- `--chat / --no-chat`: Enter or skip interactive follow-up mode (Default: chat).
 *Note: Uses native AVFoundation for recording and a stable transcription engine to avoid macOS Speech framework crashes.*
 
 ### Ask AI
@@ -82,6 +83,8 @@ Directly ask the AI a question from the terminal.
 ```bash
 openssmide ask "What is the capital of France?"
 ```
+*Options:*
+- `--chat / --no-chat`: Enter or skip interactive follow-up mode (Default: chat).
 
 ### Resume Chat
 Continue a conversation from a previous session.
