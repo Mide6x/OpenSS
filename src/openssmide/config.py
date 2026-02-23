@@ -43,17 +43,25 @@ DEFAULT_CONFIG = {
     ),
 }
 
+AVAILABLE_MODELS = [
+    {"id": "gpt-4o-mini", "name": "GPT-4o mini", "desc": "Fast, smart, and extremely cheap (Best for most tasks)"},
+    {"id": "gpt-4o", "name": "GPT-4o", "desc": "Flagship model. High performance, standard cost"},
+    {"id": "o3-mini", "name": "o3-mini", "desc": "Latest reasoning model. Fast & very smart"},
+    {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "desc": "Reliable older flagship. More expensive"},
+]
 
-def load_config() -> dict:
-    # Project root (…/OpenSS)
-    root = Path(__file__).resolve().parents[2]
-    path = root / "config.json"
+
+def load_config():
+    path = Path(__file__).resolve().parents[2] / "config.json"
     if not path.exists():
-        return DEFAULT_CONFIG.copy()
+        return DEFAULT_CONFIG
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        user_cfg = json.loads(path.read_text())
+        return {**DEFAULT_CONFIG, **user_cfg}
     except Exception:
-        return DEFAULT_CONFIG.copy()
-    cfg = DEFAULT_CONFIG.copy()
-    cfg.update({k: v for k, v in data.items() if v is not None})
-    return cfg
+        return DEFAULT_CONFIG
+
+
+def save_config(new_config):
+    path = Path(__file__).resolve().parents[2] / "config.json"
+    path.write_text(json.dumps(new_config, indent=4))

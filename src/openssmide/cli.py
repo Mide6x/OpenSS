@@ -23,7 +23,7 @@ from .ss_ai import (
 )
 from .ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
 from .db import add_message, create_session
-from .config import load_config
+from .config import load_config, AVAILABLE_MODELS, save_config
 from .voice import quick_voice_input
 
 app = typer.Typer(help="OpenSS: AI-powered screenshot analysis and chat.")
@@ -45,6 +45,7 @@ def _welcome(ctx: typer.Context):
         "[bold]Commands[/bold]\n"
         "`openssmide capture`  Capture active Chrome window and answer\n"
         "`openssmide voice`    Ask by voice (native macOS speech-to-text)\n"
+        "`openssmide model`    Switch AI models (GPT-4o, mini, etc.)\n"
         "`openssmide update`   Pull latest code and update dependencies\n\n"
         "[bold]Docs[/bold]\n"
         "Interfaces: `INTERFACES.md`"
@@ -52,17 +53,41 @@ def _welcome(ctx: typer.Context):
     console.print(Panel(body, title=title, border_style="green"))
 
     choice = Prompt.ask(
-        "[bold blue]Start[/bold blue] (capture/voice/update/exit)",
+        "[bold blue]Start[/bold blue] (capture/voice/model/update/exit)",
         default="capture",
     ).strip().lower()
     if choice in ("capture", "c"):
         ctx.invoke(capture, title=None, chat=True, voice=False)
     elif choice in ("voice", "v"):
         ctx.invoke(voice, duration=5, chat=True)
+    elif choice in ("model", "m"):
+        ctx.invoke(model)
     elif choice in ("update", "u"):
         ctx.invoke(update)
     else:
         return
+
+@app.command()
+def model():
+    """Switch between different AI models."""
+    from rich.table import Table
+    table = Table(title="Available OpenAI Models")
+    table.add_column("#", style="cyan")
+    table.add_column("Model ID", style="magenta")
+    table.add_column("Description", style="green")
+
+    for i, m in enumerate(AVAILABLE_MODELS, 1):
+        table.add_row(str(i), m["id"], m["desc"])
+
+    console.print(table)
+    choice = Prompt.ask("Select model number", choices=[str(i) for i in range(1, len(AVAILABLE_MODELS) + 1)])
+    selected = AVAILABLE_MODELS[int(choice) - 1]
+
+    cfg = load_config()
+    cfg["model"] = selected["id"]
+    save_config(cfg)
+    console.print(f"[bold green]Switched to {selected['name']}![/bold green]")
+
 
 @app.command()
 def capture(

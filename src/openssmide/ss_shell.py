@@ -17,8 +17,9 @@ current_session = None
 
 
 def ask_llm(context: str, question: str) -> str:
-    prompt = CONFIG["prompt_followup"].format(context=context, question=question)
-    r = client.responses.create(model=MODEL, input=prompt)
+    cfg = load_config()
+    prompt = cfg["prompt_followup"].format(context=context, question=question)
+    r = client.responses.create(model=cfg.get("model", "gpt-4o-mini"), input=prompt)
     return r.output_text.strip()
 
 
@@ -52,6 +53,7 @@ def interactive_chat(session_id):
     from rich.console import Console
     from rich.prompt import Prompt
     from .ss_ai import handle_ai_response
+    from .config import AVAILABLE_MODELS, save_config
     import sys
     import select
     import fcntl
@@ -59,7 +61,7 @@ def interactive_chat(session_id):
     console = Console()
     current_session = session_id
     
-    console.print("\n[bold green]Chat session active.[/bold green] [dim](Type /v for voice, /m for multiline)[/dim]\n")
+    console.print("\n[bold green]Chat session active.[/bold green] [dim](Type /v for voice, /m for multiline, /model to switch)[/dim]\n")
     
     while True:
         try:
@@ -114,6 +116,22 @@ def interactive_chat(session_id):
             q = "\n".join(lines)
             if not q.strip():
                 continue
+        elif cmd in ("/model", "/switch"):
+            from rich.table import Table
+            table = Table(title="Available Models")
+            table.add_column("#", style="cyan")
+            table.add_column("Model ID", style="magenta")
+            table.add_column("Description", style="green")
+            for i, m in enumerate(AVAILABLE_MODELS, 1):
+                table.add_row(str(i), m["id"], m["desc"])
+            console.print(table)
+            choice = Prompt.ask("Select model number", choices=[str(i) for i in range(1, len(AVAILABLE_MODELS)+1)])
+            selected = AVAILABLE_MODELS[int(choice)-1]
+            cfg = load_config()
+            cfg["model"] = selected["id"]
+            save_config(cfg)
+            console.print(f"[bold green]Switched to {selected['name']}![/bold green]\n")
+            continue
 
         with console.status("[dim]Thinking...[/dim]"):
             ctx = load_context(current_session)

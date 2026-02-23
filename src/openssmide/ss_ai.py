@@ -65,27 +65,30 @@ def ocr_image(path: Path) -> str:
 
 # -------- OpenAI ask --------
 def ask_gpt(text: str) -> str:
-    prompt = CONFIG["prompt_main"].format(text=text)
+    cfg = load_config()
+    prompt = cfg["prompt_main"].format(text=text)
     resp = client.responses.create(
-        model=MODEL,
+        model=cfg["model"],
         input=prompt,
     )
     return resp.output_text.strip()
 
 
 def ask_followup(context: str, question: str) -> str:
-    prompt = CONFIG["prompt_followup"].format(context=context, question=question)
+    cfg = load_config()
+    prompt = cfg["prompt_followup"].format(context=context, question=question)
     resp = client.responses.create(
-        model=MODEL,
+        model=cfg["model"],
         input=prompt,
     )
     return resp.output_text.strip()
 
 
 def general_ask(question: str) -> str:
-    prompt = CONFIG["prompt_general"].format(question=question)
+    cfg = load_config()
+    prompt = cfg["prompt_general"].format(question=question)
     resp = client.responses.create(
-        model=MODEL,
+        model=cfg["model"],
         input=prompt,
     )
     return resp.output_text.strip()
