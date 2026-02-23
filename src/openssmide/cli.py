@@ -17,6 +17,7 @@ from .ss_ai import (
     extract_first_code_block,
     copy_to_clipboard,
     general_ask,
+    handle_ai_response,
 )
 from .ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
 from .db import add_message, create_session
@@ -188,23 +189,13 @@ def voice(
         with Status("[dim]Thinking...", console=console):
             ans = general_ask(text)
             
-        console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
+        handle_ai_response(ans, console)
         
-        # Create session if we want to chat or keep history
+        # Create session
         title = f"Voice: {text[:30]}..."
         session_id = create_session(title)
         add_message(session_id, "user", text)
         add_message(session_id, "assistant", ans)
-
-        # Display Code
-        code_block = extract_first_code_block(ans)
-        if code_block:
-            console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
-            
-        # Handle Autocopy
-        msg = handle_autocopy(ans)
-        if msg:
-            console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
 
         if chat:
             console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
@@ -214,30 +205,31 @@ def voice(
 
 @app.command()
 def ask(
-    question: str = typer.Argument(..., help="Question to ask the AI"),
+    question: str = typer.Argument(None, help="Question to ask (leave blank to read from stdin/paste)"),
     chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after query")
 ):
-    """Directly ask the AI a question without a screenshot. Optionally start a chat."""
-    with Status("[dim]Thinking...", console=console):
-        ans = general_ask(question)
+    """Directly ask the AI a question (supports multi-line stdin). Optionally start a chat."""
+    q = question
+    if not q:
+        import sys
+        if sys.stdin.isatty():
+            console.print("[bold yellow]Direct Input Mode:[/bold yellow] Type/paste your question and press [bold]Ctrl+D[/bold] (Mac/Linux) or [bold]Ctrl+Z[/bold] (Windows) to finish.")
+        q = sys.stdin.read().strip()
         
-    console.print(Panel(Markdown(ans), title="AI Answer", border_style="green"))
+    if not q:
+        console.print("[red]No question provided.[/red]")
+        return
+
+    with Status("[dim]Thinking...", console=console):
+        ans = general_ask(q)
+        
+    handle_ai_response(ans, console)
     
     # Create session
-    title = f"Ask: {question[:30]}..."
+    title = f"Ask: {q[:30]}..."
     session_id = create_session(title)
-    add_message(session_id, "user", question)
+    add_message(session_id, "user", q)
     add_message(session_id, "assistant", ans)
-
-    # Display Code
-    code_block = extract_first_code_block(ans)
-    if code_block:
-        console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
-        
-    # Handle Autocopy
-    msg = handle_autocopy(ans)
-    if msg:
-        console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
 
     if chat:
         console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")

@@ -50,24 +50,27 @@ def open_latest_session():
 
 def interactive_chat(session_id):
     from rich.console import Console
-    from rich.markdown import Markdown
     from rich.prompt import Prompt
-    from rich.panel import Panel
+    from .ss_ai import handle_ai_response
     
     console = Console()
     current_session = session_id
     
-    console.print("\n[bold green]Chat session active.[/bold green] [dim](Press Enter on empty line to exit, or type /v for voice)[/dim]\n")
+    console.print("\n[bold green]Chat session active.[/bold green] [dim](Type /v for voice, /m for multiline)[/dim]\n")
     
     while True:
         try:
             q = Prompt.ask("[bold blue]Ask[/bold blue]")
         except EOFError:
             break
+        except KeyboardInterrupt:
+            break
         if not q:
             break
             
-        if q.strip() == "/v" or q.strip() == "/voice":
+        # Commands
+        cmd = q.strip().lower()
+        if cmd in ("/v", "/voice"):
             from .voice import quick_voice_input
             console.print("[bold green]Listening (5s)...[/bold green]")
             voice_text, err = quick_voice_input(5)
@@ -79,34 +82,27 @@ def interactive_chat(session_id):
                 continue
             console.print(f"[bold blue]You said:[/bold blue] {voice_text}")
             q = voice_text
+        elif cmd in ("/m", "/multiline"):
+            console.print("[bold yellow]Multiline Mode:[/bold yellow] Type your message, then a single [bold].[/bold] on a new line to finish.")
+            lines = []
+            while True:
+                line = input()
+                if line.strip() == ".":
+                    break
+                lines.append(line)
+            q = "\n".join(lines)
+            if not q.strip():
+                continue
 
         with console.status("[dim]Thinking...[/dim]"):
             ctx = load_context(current_session)
             ans = ask_llm(ctx, q)
             
-        console.print(Markdown(ans))
+        handle_ai_response(ans, console)
         
-        # Explicit Code Display for follow-ups
-        from .ss_ai import extract_first_code_block, copy_to_clipboard
-        from .config import load_config
-        cfg = load_config()
-        
-        code_block = extract_first_code_block(ans)
-        if code_block:
-            console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
-            
-        # Autocopy for follow-ups
-        if cfg.get("autocopy", False):
-            mode = cfg.get("autocopy_mode", "answer")
-            payload = code_block if (mode == "code" and code_block) else ans
-            if payload:
-                copy_to_clipboard(payload)
-                msg = "Code copied" if mode == "code" and code_block else "Answer copied"
-                console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
-
-        console.print("") # Padding
         add_message(current_session, "user", q)
         add_message(current_session, "assistant", ans)
+        console.print("") # Padding
 
 
 def main():

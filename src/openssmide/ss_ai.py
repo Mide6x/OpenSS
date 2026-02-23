@@ -154,6 +154,38 @@ def take_screenshot_and_analyze(session_title=None):
     return session_id, (text, ans, img)
 
 
+def handle_ai_response(ans: str, console=None):
+    """Unified handler for AI responses: prints Markdown, extracts code, and handles autocopy."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.markdown import Markdown
+    from .ss_ai import extract_first_code_block, copy_to_clipboard
+    from .config import load_config
+
+    if console is None:
+        console = Console()
+        
+    cfg = load_config()
+
+    # 1. Print Main Answer
+    console.print(Panel(Markdown(ans), title="AI Analysis", border_style="green"))
+
+    # 2. Extract and Print Code
+    code_block = extract_first_code_block(ans)
+    if code_block:
+        console.print(Panel(code_block, title="Extracted Code", border_style="bold yellow"))
+
+    # 3. Handle Autocopy
+    if cfg.get("autocopy", False):
+        mode = cfg.get("autocopy_mode", "answer")
+        payload = code_block if (mode == "code" and code_block) else ans
+        
+        if payload:
+            copy_to_clipboard(payload)
+            msg = "Code copied" if mode == "code" and code_block else "Answer copied"
+            console.print(f"[dim italic]({msg} to clipboard)[/dim italic]")
+
+
 def main():
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("Set OPENAI_API_KEY first")
