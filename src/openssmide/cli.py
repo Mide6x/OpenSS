@@ -34,6 +34,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = PROJECT_ROOT / ".env"
 
 
+def _read_env() -> dict:
+    """Read the .env file into a dict."""
+    if not ENV_PATH.exists():
+        return {}
+    pairs = {}
+    for line in ENV_PATH.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            pairs[k.strip()] = v.strip()
+    return pairs
+
+
+def _write_env(pairs: dict):
+    """Write a dict back to .env."""
+    lines = [f"{k}={v}" for k, v in pairs.items() if v]
+    lines.append("")
+    ENV_PATH.write_text("\n".join(lines))
+
+
 def _run_setup():
     """Prompt for API key and optional MongoDB URI, write to .env."""
     console.print()
@@ -54,12 +76,12 @@ def _run_setup():
         default="",
     ).strip()
 
-    lines = [f"OPENAI_API_KEY={api_key}"]
+    env = _read_env()
+    env["OPENAI_API_KEY"] = api_key
     if mongo:
-        lines.append(f"MONGO_URI={mongo}")
-    lines.append("")
+        env["MONGO_URI"] = mongo
+    _write_env(env)
 
-    ENV_PATH.write_text("\n".join(lines))
     os.environ["OPENAI_API_KEY"] = api_key
     if mongo:
         os.environ["MONGO_URI"] = mongo
@@ -76,11 +98,104 @@ def setup():
     _run_setup()
 
 
+@app.command()
+def apikey():
+    """Change your OpenAI API key."""
+    env = _read_env()
+    current = env.get("OPENAI_API_KEY", "")
+    masked = current[:6] + "..." + current[-4:] if len(current) > 10 else "(not set)"
+
+    console.print()
+    console.print(f"  Current key: [dim]{masked}[/dim]")
+    new_key = Prompt.ask("  [bold]New OpenAI API Key[/bold]").strip()
+    if not new_key:
+        console.print("  [yellow]No change.[/yellow]")
+        return
+    env["OPENAI_API_KEY"] = new_key
+    _write_env(env)
+    os.environ["OPENAI_API_KEY"] = new_key
+    console.print("  [green]✓ API key updated.[/green]")
+    console.print()
+
+
+@app.command()
+def mongo():
+    """Set or change your MongoDB URI."""
+    env = _read_env()
+    current = env.get("MONGO_URI", "")
+
+    console.print()
+    if current:
+        console.print(f"  Current URI: [dim]{current}[/dim]")
+    else:
+        console.print("  MongoDB URI: [dim](not set)[/dim]")
+
+    new_uri = Prompt.ask(
+        "  [bold]MongoDB URI[/bold] [dim](blank to clear)[/dim]",
+        default="",
+    ).strip()
+
+    if new_uri:
+        env["MONGO_URI"] = new_uri
+    elif "MONGO_URI" in env:
+        del env["MONGO_URI"]
+
+    _write_env(env)
+    if new_uri:
+        os.environ["MONGO_URI"] = new_uri
+        console.print("  [green]✓ MongoDB URI updated.[/green]")
+    else:
+        os.environ.pop("MONGO_URI", None)
+        console.print("  [green]✓ MongoDB URI cleared.[/green]")
+    console.print()
+
+
+@app.command()
+def uninstall():
+    """Remove OpenSS from your system."""
+    import shutil
+
+    console.print()
+    console.print("  [bold red]● OpenSS Uninstall[/bold red]")
+    console.print("  ───────────────────")
+    console.print()
+    console.print(f"  This will remove:")
+    console.print(f"  [dim]  • {PROJECT_ROOT}[/dim]")
+    console.print(f"  [dim]  • ~/bin/openssmide symlink[/dim]")
+    console.print()
+
+    confirm = Prompt.ask("  [bold]Are you sure?[/bold] (yes/no)", default="no").strip().lower()
+    if confirm not in ("yes", "y"):
+        console.print("  [yellow]Cancelled.[/yellow]")
+        return
+
+    # Remove symlink
+    symlink = Path.home() / "bin" / "openssmide"
+    if symlink.exists() or symlink.is_symlink():
+        symlink.unlink()
+        console.print("  [dim]✓ Removed ~/bin/openssmide[/dim]")
+
+    # Remove install dir (only if it's ~/.openss — don't nuke a dev checkout)
+    install_dir = Path.home() / ".openss"
+    if PROJECT_ROOT == install_dir and install_dir.exists():
+        shutil.rmtree(install_dir)
+        console.print(f"  [dim]✓ Removed {install_dir}[/dim]")
+    else:
+        console.print(f"  [dim]⚠ Skipped {PROJECT_ROOT} (not a standard install)[/dim]")
+
+    console.print()
+    console.print("  [green]✓ OpenSS has been uninstalled.[/green]")
+    console.print()
+
+
+SKIP_SETUP_CMDS = ("setup", "update", "uninstall", "apikey", "mongo")
+
+
 @app.callback(invoke_without_command=True)
 def _welcome(ctx: typer.Context):
     if ctx.invoked_subcommand is not None:
-        # Auto-trigger setup if .env is missing (except for 'setup' and 'update' commands)
-        if not ENV_PATH.exists() and ctx.invoked_subcommand not in ("setup", "update"):
+        # Auto-trigger setup if .env is missing (except for management commands)
+        if not ENV_PATH.exists() and ctx.invoked_subcommand not in SKIP_SETUP_CMDS:
             console.print()
             console.print("  [yellow]First-time setup required.[/yellow]")
             _run_setup()

@@ -150,6 +150,38 @@ Pull latest code and update dependencies.
 openssmide update
 ```
 
+### Setup
+
+Run initial setup or redo it anytime. Prompts for your OpenAI API key and optional MongoDB URI. Credentials are stored locally in your install directory.
+
+```bash
+openssmide setup
+```
+
+### Change API Key
+
+Update your OpenAI API key without re-running full setup.
+
+```bash
+openssmide apikey
+```
+
+### MongoDB
+
+Set, change, or clear your MongoDB URI anytime.
+
+```bash
+openssmide mongo
+```
+
+### Uninstall
+
+Completely remove OpenSS from your system (deletes `~/.openss` and the `~/bin/openssmide` symlink).
+
+```bash
+openssmide uninstall
+```
+
 ### Interfaces
 
 See `INTERFACES.md` for available interfaces and entry points.
