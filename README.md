@@ -1,20 +1,21 @@
 # OpenSS – AI-Powered Screenshot Analysis
 
-OpenSS is a CLI tool that captures your screen (optimized for Chrome on macOS), extracts text via OCR, and analyzes it using GPT-4-class AI models. Built for coding challenges, document analysis, and quick technical queries.
+OpenSS is a CLI tool that captures your screen (Chrome or PowerPoint on macOS), extracts text via OCR, and analyzes it using GPT-4-class AI models. Built for coding challenges, document analysis, and quick technical queries.
 
 > [!IMPORTANT]
-> **Compatibility**: This tool is strictly for **macOS** and is optimized for the **Google Chrome** browser.
-> **Chrome + Terminal must be on the same display** for capture to work.
+> **Compatibility**: This tool is strictly for **macOS**.
+> **Capture targets**: `chrome`, `powerpoint`, and `word`.
+> **Target app + Terminal must be on the same display** for capture to work.
 
 ## Features
 
-- **Smart Capture** – Captures your active Chrome window.
-- **Native OCR** – Uses macOS Vision Framework for lightning-fast, high-accuracy text recognition.
-- **Interactive Chat** – Follow up on analyses with a conversational AI interface.
+- **Smart Capture (Auto-Detect)** – Automatically detects and captures your active Chrome, PowerPoint, or Word window without needing explicit flags.
+- **Multimodal AI Vision & Native OCR** – Passes the actual screenshot directly to GPT-4o or Claude 3.5 Sonnet to perfectly read complex layouts, images, and diagrams, while using macOS OCR as a fallback.
+- **Interactive Chat** – Follow up on analyses contextually. Now supports continuous editing of Word documents!
 - **Native Voice-to-Text** – Ask questions with your voice using macOS native speech recognition (type `/v` in chat or use `--voice` flag).
 - **Autocopy** – Automatically copies clean AI responses or extracted code blocks to your clipboard.
 - **Rich UI** – Beautiful terminal interface with markdown rendering and progress spinners.
-- **Model Switcher** – Swap between GPT-4o, GPT-4o mini, o3-mini on the fly.
+- **Model Switcher** – Swap between OpenAI and Claude models on the fly.
 
 ## Installation
 
@@ -24,6 +25,7 @@ OpenSS is a CLI tool that captures your screen (optimized for Chrome on macOS), 
 - **Python 3.10+**
 - **MongoDB** (Running locally or via URI)
 - **OpenAI API Key**
+- **Anthropic API Key** (optional, for Claude models)
 
 ### 2. Quick Setup
 
@@ -39,6 +41,7 @@ Create a `.env` file in the root directory:
 
 ```env
 OPENAI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
 MONGO_URI=mongodb://localhost:27017/  # Optional
 ```
 
@@ -61,7 +64,7 @@ export PATH="$HOME/bin:$PATH"
 
 ### Capture and Analyze
 
-Capture the active Chrome window and get an AI response.
+Capture the active app window and get an AI response.
 
 ```bash
 openssmide capture
@@ -71,6 +74,22 @@ openssmide capture
 - `-t, --title TEXT` – Set a custom session title.
 - `--chat / --no-chat` – Enter or skip interactive follow-up mode (Default: chat).
 - `-v, --voice` – Use voice input to ask a question about the screenshot immediately.
+- `-a, --target TEXT` – Capture target: `chrome`, `powerpoint`, or `word`.
+- `--full-slide / --window` – With `--target powerpoint`, require Slide Show mode for full-slide capture.
+
+### Microsoft Word Automation
+
+Read, question, write, or AI-edit the currently open Word document.
+
+```bash
+openssmide word --action read
+openssmide word --action ask --instruction "Summarize this contract in 5 bullet points"
+openssmide word --action edit --instruction "Rewrite this into a professional project proposal"
+openssmide word --action write --text "New full document text"
+```
+
+Optional:
+- `-f, --file PATH` – Open a specific Word file before running the action.
 
 ### Voice Question
 
@@ -97,6 +116,23 @@ openssmide ask "What is the capital of France?"
 **Options:**
 - `--chat / --no-chat` – Enter or skip interactive follow-up mode (Default: chat).
 
+### Write to Word (Interactive)
+
+Interactively ask the AI to generate content and write it directly into your active Microsoft Word document.
+
+```bash
+openssmide write
+```
+*The command will prompt you with "What do you want to write?" before generating and pasting the response. It then leaves a chat session open so you can interactively tell the AI to re-write, summarize, or edit your content continuously!*
+
+### Summarize Word Document
+
+Read the currently active Microsoft Word document and generate a comprehensive AI summary in the terminal.
+
+```bash
+openssmide summarize
+```
+
 ### Resume Chat
 
 Continue a conversation from a previous session.
@@ -113,7 +149,7 @@ Inside Chat:
 
 ### Model Switcher
 
-Switch between OpenAI models interactively.
+Switch between OpenAI and Claude models interactively.
 
 ```bash
 openssmide model
@@ -152,7 +188,7 @@ openssmide update
 
 ### Setup
 
-Run initial setup or redo it anytime. Prompts for your OpenAI API key and optional MongoDB URI. Credentials are stored locally in your install directory.
+Run initial setup or redo it anytime. Prompts for OpenAI/Anthropic API keys and optional MongoDB URI. Credentials are stored locally in your install directory.
 
 ```bash
 openssmide setup
@@ -164,6 +200,14 @@ Update your OpenAI API key without re-running full setup.
 
 ```bash
 openssmide apikey
+```
+
+### Change Anthropic Key
+
+Update your Anthropic API key without re-running full setup.
+
+```bash
+openssmide anthropic
 ```
 
 ### MongoDB
@@ -189,7 +233,7 @@ See `INTERFACES.md` for available interfaces and entry points.
 ## Security and Privacy
 
 - The `.env` file and `config.json` are ignored by git to protect your API keys and local settings.
-- Only the Chrome window is captured. Terminal must be on the same display as Chrome.
+- Only the selected target window is captured. Terminal must be on the same display as the target app.
 
 ## License
 

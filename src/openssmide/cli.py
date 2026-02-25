@@ -9,6 +9,7 @@ import os
 import sys
 import subprocess
 import time
+import readline
 from pathlib import Path
 from bson import ObjectId
 
@@ -16,15 +17,23 @@ from .ss_ai import (
     take_screenshot_and_analyze,
     build_context,
     ask_followup,
+    ask_prompt,
     extract_first_code_block,
     copy_to_clipboard,
     general_ask,
     handle_ai_response,
+    require_api_key,
 )
 from .ss_shell import load_context, ask_llm, list_sessions, open_latest_session, interactive_chat
 from .db import add_message, create_session
 from .config import load_config, AVAILABLE_MODELS, save_config
 from .voice import quick_voice_input
+from .word_automation import (
+    open_document,
+    read_active_document,
+    write_active_document,
+    save_active_document,
+)
 
 app = typer.Typer(help="OpenSS: AI-powered screenshot analysis and chat.")
 console = Console()
@@ -57,7 +66,7 @@ def _write_env(pairs: dict):
 
 
 def _run_setup():
-    """Prompt for API key and optional MongoDB URI, write to .env."""
+    """Prompt for provider API keys and optional MongoDB URI, write to .env."""
     console.print()
     console.print("  [bold green]● OpenSS Setup[/bold green]")
     console.print("  ───────────────────")
@@ -66,9 +75,11 @@ def _run_setup():
     console.print(f"  [dim]{ENV_PATH}[/dim]")
     console.print()
 
-    api_key = Prompt.ask("  [bold]OpenAI API Key[/bold]").strip()
-    if not api_key:
-        console.print("  [red]✗ API key is required.[/red]")
+    openai_key = Prompt.ask("  [bold]OpenAI API Key[/bold] [dim](press Enter to skip if using Anthropic)[/dim]", default="").strip()
+    anthropic_key = Prompt.ask("  [bold]Anthropic API Key[/bold] [dim](press Enter to skip if using OpenAI)[/dim]", default="").strip()
+    
+    if not openai_key and not anthropic_key:
+        console.print("  [red]✗ At least one API key (OpenAI or Anthropic) is required.[/red]")
         raise typer.Exit(1)
 
     mongo = Prompt.ask(
@@ -77,12 +88,18 @@ def _run_setup():
     ).strip()
 
     env = _read_env()
-    env["OPENAI_API_KEY"] = api_key
+    if openai_key:
+        env["OPENAI_API_KEY"] = openai_key
+    if anthropic_key:
+        env["ANTHROPIC_API_KEY"] = anthropic_key
     if mongo:
         env["MONGO_URI"] = mongo
     _write_env(env)
 
-    os.environ["OPENAI_API_KEY"] = api_key
+    if openai_key:
+        os.environ["OPENAI_API_KEY"] = openai_key
+    if anthropic_key:
+        os.environ["ANTHROPIC_API_KEY"] = anthropic_key
     if mongo:
         os.environ["MONGO_URI"] = mongo
 
@@ -94,27 +111,64 @@ def _run_setup():
 
 @app.command()
 def setup():
-    """Set up your OpenAI API key (and optional MongoDB URI)."""
+    """Set up OpenAI/Anthropic API keys (and optional MongoDB URI)."""
     _run_setup()
 
 
 @app.command()
 def apikey():
-    """Change your OpenAI API key."""
+    """Change your OpenAI or Anthropic API keys."""
     env = _read_env()
-    current = env.get("OPENAI_API_KEY", "")
+    
+    current_openai = env.get("OPENAI_API_KEY", "")
+    masked_openai = current_openai[:6] + "..." + current_openai[-4:] if len(current_openai) > 10 else "(not set)"
+    
+    current_anthropic = env.get("ANTHROPIC_API_KEY", "")
+    masked_anthropic = current_anthropic[:6] + "..." + current_anthropic[-4:] if len(current_anthropic) > 10 else "(not set)"
+
+    console.print()
+    console.print(f"  Current OpenAI key: [dim]{masked_openai}[/dim]")
+    new_openai = Prompt.ask("  [bold]New OpenAI API Key[/bold] [dim](leave blank to keep current)[/dim]", default="").strip()
+    
+    console.print(f"  Current Anthropic key: [dim]{masked_anthropic}[/dim]")
+    new_anthropic = Prompt.ask("  [bold]New Anthropic API Key[/bold] [dim](leave blank to keep current)[/dim]", default="").strip()
+    
+    updated = False
+    if new_openai:
+        env["OPENAI_API_KEY"] = new_openai
+        os.environ["OPENAI_API_KEY"] = new_openai
+        updated = True
+        
+    if new_anthropic:
+        env["ANTHROPIC_API_KEY"] = new_anthropic
+        os.environ["ANTHROPIC_API_KEY"] = new_anthropic
+        updated = True
+
+    if updated:
+        _write_env(env)
+        console.print("  [green]✓ API key(s) updated.[/green]")
+    else:
+        console.print("  [yellow]No changes made.[/yellow]")
+    console.print()
+
+
+@app.command()
+def anthropic():
+    """Change your Anthropic API key."""
+    env = _read_env()
+    current = env.get("ANTHROPIC_API_KEY", "")
     masked = current[:6] + "..." + current[-4:] if len(current) > 10 else "(not set)"
 
     console.print()
     console.print(f"  Current key: [dim]{masked}[/dim]")
-    new_key = Prompt.ask("  [bold]New OpenAI API Key[/bold]").strip()
+    new_key = Prompt.ask("  [bold]New Anthropic API Key[/bold]").strip()
     if not new_key:
         console.print("  [yellow]No change.[/yellow]")
         return
-    env["OPENAI_API_KEY"] = new_key
+    env["ANTHROPIC_API_KEY"] = new_key
     _write_env(env)
-    os.environ["OPENAI_API_KEY"] = new_key
-    console.print("  [green]✓ API key updated.[/green]")
+    os.environ["ANTHROPIC_API_KEY"] = new_key
+    console.print("  [green]✓ Anthropic API key updated.[/green]")
     console.print()
 
 
@@ -188,7 +242,7 @@ def uninstall():
     console.print()
 
 
-SKIP_SETUP_CMDS = ("setup", "update", "uninstall", "apikey", "mongo")
+SKIP_SETUP_CMDS = ("setup", "update", "uninstall", "apikey", "anthropic", "mongo")
 
 
 @app.callback(invoke_without_command=True)
@@ -211,11 +265,12 @@ def _welcome(ctx: typer.Context):
     title = "[bold green]Welcome to OpenSS[/bold green]"
     body = (
         "[bold]What it does[/bold]\n"
-        "Capture a Chrome window, extract text with macOS OCR, and answer with GPT.\n\n"
+        "Capture a Chrome, PowerPoint, or Word window, extract text with macOS OCR, and answer with GPT.\n\n"
         "[bold]Commands[/bold]\n"
-        "`openssmide capture`  Capture active Chrome window and answer\n"
+        "`openssmide capture`  Capture active window (Chrome/PowerPoint/Word) and answer\n"
+        "`openssmide word`     Read/ask/edit active Microsoft Word document\n"
         "`openssmide voice`    Ask by voice (native macOS speech-to-text)\n"
-        "`openssmide model`    Switch AI models (GPT-4o, mini, etc.)\n"
+        "`openssmide model`    Switch AI models (OpenAI/Claude)\n"
         "`openssmide update`   Pull latest code and update dependencies\n\n"
         "[bold]Docs[/bold]\n"
         "Interfaces: `INTERFACES.md`"
@@ -223,11 +278,13 @@ def _welcome(ctx: typer.Context):
     console.print(Panel(body, title=title, border_style="green"))
 
     choice = Prompt.ask(
-        "[bold blue]Start[/bold blue] (capture/voice/model/update/exit)",
+        "[bold blue]Start[/bold blue] (capture/word/voice/model/update/exit)",
         default="capture",
     ).strip().lower()
     if choice in ("capture", "c"):
-        ctx.invoke(capture, title=None, chat=True, voice=False)
+        ctx.invoke(capture, title=None, chat=True, voice=False, target=None, full_slide=False)
+    elif choice in ("word", "w"):
+        ctx.invoke(word, action="read", instruction=None, text=None, file=None)
     elif choice in ("voice", "v"):
         ctx.invoke(voice, duration=5, chat=True)
     elif choice in ("model", "m"):
@@ -241,17 +298,26 @@ def _welcome(ctx: typer.Context):
 def model():
     """Switch between different AI models."""
     from rich.table import Table
-    table = Table(title="Available OpenAI Models")
+    table = Table(title="Available AI Models")
     table.add_column("#", style="cyan")
+    table.add_column("Provider", style="yellow")
     table.add_column("Model ID", style="magenta")
     table.add_column("Description", style="green")
 
     for i, m in enumerate(AVAILABLE_MODELS, 1):
-        table.add_row(str(i), m["id"], m["desc"])
+        table.add_row(str(i), m.get("provider", "openai"), m["id"], m["desc"])
 
     console.print(table)
     choice = Prompt.ask("Select model number", choices=[str(i) for i in range(1, len(AVAILABLE_MODELS) + 1)])
     selected = AVAILABLE_MODELS[int(choice) - 1]
+    env = _read_env()
+    provider = selected.get("provider", "openai")
+    if provider == "anthropic" and not env.get("ANTHROPIC_API_KEY"):
+        console.print("[red]Missing ANTHROPIC_API_KEY. Run: openssmide anthropic (or openssmide setup).[/red]")
+        return
+    if provider == "openai" and not env.get("OPENAI_API_KEY"):
+        console.print("[red]Missing OPENAI_API_KEY. Run: openssmide apikey (or openssmide setup).[/red]")
+        return
 
     cfg = load_config()
     cfg["model"] = selected["id"]
@@ -263,9 +329,26 @@ def model():
 def capture(
     title: str = typer.Option(None, "--title", "-t", help="Session title"),
     chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat after capture"),
-    voice: bool = typer.Option(False, "--voice", "-v", help="Use voice input for initial question (not applicable to screenshot OCR)")
+    voice: bool = typer.Option(False, "--voice", "-v", help="Use voice input for initial question (not applicable to screenshot OCR)"),
+    target: str = typer.Option(None, "--target", "-a", help="Capture target: chrome, powerpoint, or word"),
+    full_slide: bool = typer.Option(
+        False,
+        "--full-slide/--window",
+        help="When target=powerpoint, require Slide Show mode to capture the full slide area.",
+    ),
 ):
     """Capture a screenshot, analyze it with AI, and optionally start a chat."""
+    cfg = load_config()
+    if target is None:
+        from .capture_rules import detect_active_target
+        capture_target = detect_active_target()
+    else:
+        capture_target = target.strip().lower()
+
+    if capture_target not in ("chrome", "powerpoint", "word"):
+        console.print("[red]Invalid --target. Use 'chrome', 'powerpoint', or 'word'.[/red]")
+        return
+
     # Handle Voice Input for Question
     voice_question = None
     if voice:
@@ -276,8 +359,12 @@ def capture(
         elif voice_question:
             console.print(f"[bold blue]Question:[/bold blue] {voice_question}")
 
-    with Status("[bold blue]Capturing and analyzing...", console=console) as status:
-        session_id, result = take_screenshot_and_analyze(title)
+    with Status(f"[bold blue]Capturing {capture_target} and analyzing...", console=console) as status:
+        session_id, result = take_screenshot_and_analyze(
+            title,
+            target=capture_target,
+            full_slide=full_slide,
+        )
         
     if not session_id:
         console.print(f"[red]{result}[/red]")
@@ -298,6 +385,184 @@ def capture(
     if chat:
         console.print("\n[bold]Entering follow-up chat. Press Ctrl+C or Enter on empty line to exit.[/bold]")
         interactive_chat(session_id)
+
+
+@app.command()
+def word(
+    action: str = typer.Option(
+        "read",
+        "--action",
+        "-a",
+        help="Action: read, ask, write, edit",
+    ),
+    instruction: str = typer.Option(
+        None,
+        "--instruction",
+        "-i",
+        help="Question (ask) or edit instruction (edit).",
+    ),
+    text: str = typer.Option(
+        None,
+        "--text",
+        help="Direct text used by --action write (replaces active document content).",
+    ),
+    file: str = typer.Option(
+        None,
+        "--file",
+        "-f",
+        help="Optional .docx file path to open in Word before action.",
+    ),
+):
+    """Read, ask, write, or AI-edit the active Microsoft Word document."""
+    action = (action or "read").strip().lower()
+    if action not in ("read", "ask", "write", "edit"):
+        console.print("[red]Invalid --action. Use: read, ask, write, edit.[/red]")
+        return
+
+    if file:
+        try:
+            open_document(Path(file))
+            time.sleep(0.25)
+        except Exception as e:
+            console.print(f"[red]Failed to open file in Word: {e}[/red]")
+            return
+
+    try:
+        title, doc_text = read_active_document()
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        return
+
+    cfg = load_config()
+    max_chars = int(cfg.get("max_word_chars", 40000))
+    if len(doc_text) > max_chars and action in ("ask", "edit"):
+        console.print(
+            f"[red]Document too large ({len(doc_text)} chars). Increase max_word_chars (current {max_chars}) or shorten document.[/red]"
+        )
+        return
+
+    if action == "read":
+        console.print(Panel(Markdown(doc_text or "_(empty document)_"), title=f"Word: {title}", border_style="cyan"))
+        return
+
+    if action == "ask":
+        if not instruction:
+            console.print("[red]Missing --instruction for --action ask.[/red]")
+            return
+        require_api_key()
+        prompt = cfg["prompt_word_question"].format(
+            doc_title=title,
+            doc_text=doc_text,
+            question=instruction,
+        )
+        with Status("[dim]Analyzing document...[/dim]", console=console):
+            ans = ask_prompt(prompt, model_id=cfg["model"])
+        console.print(Panel(Markdown(ans), title="Word Analysis", border_style="green"))
+        return
+
+    if action == "write":
+        if text is None:
+            console.print("[red]Missing --text for --action write.[/red]")
+            return
+        try:
+            write_active_document(text)
+        except Exception as e:
+            console.print(f"[red]Write failed: {e}[/red]")
+            return
+        console.print("[green]Word document updated.[/green]")
+        return
+    if action == "edit":
+        if not instruction:
+            console.print("[red]Missing --instruction for --action edit.[/red]")
+            return
+        require_api_key()
+        prompt = cfg["prompt_word_edit"].format(
+            doc_title=title,
+            doc_text=doc_text,
+            instruction=instruction,
+        )
+        with Status("[dim]Editing document with AI...[/dim]", console=console):
+            revised_text = ask_prompt(prompt, model_id=cfg["model"])
+        if not revised_text.strip():
+            console.print("[red]AI returned empty content; edit aborted.[/red]")
+            return
+        try:
+            write_active_document(revised_text)
+        except Exception as e:
+            console.print(f"[red]Edit failed: {e}[/red]")
+            return
+        console.print("[green]Word document edited and applied.[/green]")
+
+@app.command()
+def write(
+    chat: bool = typer.Option(True, "--chat/--no-chat", help="Enter interactive chat to edit the document after writing")
+):
+    """Interactively prompt the AI to generate content and write it into the active Microsoft Word document."""
+    try:
+        # Just check if Word is running/active document exists.
+        read_active_document()
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        return
+        
+    prompt_text = Prompt.ask("[bold blue]What do you want to write?[/bold blue]").strip()
+    if not prompt_text:
+        console.print("[red]Input cannot be empty.[/red]")
+        return
+
+    with Status("[dim]Generating content...", console=console):
+        # We can use the configured general prompt but modify it slightly for purely writing tasks
+        cfg = load_config()
+        # Direct instruction ensures it only returns the requested text without chatty filler
+        instruction = f"Write the following content directly without markdown formatting (unless specified), conversational filler, or intro/outro text:\n\n{prompt_text}"
+        ans = ask_prompt(instruction, cfg["model"])
+        
+    handle_ai_response(ans, console)
+    
+    try:
+        write_active_document(ans)
+        console.print("[green]✓ Output successfully written to the active Word document.[/green]")
+    except Exception as e:
+        console.print(f"[red]Failed to write to Word: {e}[/red]")
+        return
+
+    # Create session
+    title = f"Word Write: {prompt_text[:30]}..."
+    session_id = create_session(title)
+    add_message(session_id, "user", prompt_text)
+    add_message(session_id, "assistant", ans)
+
+    if chat:
+        console.print("\n[bold]Entering follow-up chat to edit the document. Press Ctrl+C or Enter on empty line to exit.[/bold]")
+        interactive_chat(session_id, auto_write_word=True)
+
+@app.command()
+def summarize():
+    """Extract text from the active Microsoft Word document and summarize it using AI."""
+    try:
+        title, doc_text = read_active_document()
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        return
+
+    if not doc_text.strip():
+        console.print("[red]The active Word document is empty.[/red]")
+        return
+
+    cfg = load_config()
+    max_chars = int(cfg.get("max_word_chars", 40000))
+    if len(doc_text) > max_chars:
+        console.print(
+            f"[red]Document too large ({len(doc_text)} chars). Increase max_word_chars (current {max_chars}) or shorten document.[/red]"
+        )
+        return
+
+    with Status(f"[dim]Summarizing '{title}'...", console=console):
+        instruction = f"Please provide a comprehensive summary of the following document:\n\n{doc_text}"
+        ans = ask_prompt(instruction, cfg["model"])
+
+    console.print(f"\n[bold green]Summary for {title}:[/bold green]")
+    handle_ai_response(ans, console)
 
 @app.command()
 def chat(
